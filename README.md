@@ -22,9 +22,9 @@ This program prints `Hello, World!`.
 - Run `build.bat`.
 
 ## Use
+- Run `bf.exe` (or simply `bf`) and pass to it a brainfuck source file to interpret. It will only run the first argument and ignore every other file. The _tests_ folder contains a bunch of brainfuck source files you can try to run.
+- Run with the `-build` option to compile the argument (both to C and to an executable). You can optionally pass in another file name which will be used as the output name.
 - Run `bf.exe -help` to see what you can do with it.
 
 ## Notes
 Both the interpreter and the compiler use a "wrap-around" strategy when moving the data pointer out of bounds. The allocated space is of 30.000 bytes, and going off one end wraps you back to the other side.
-
-The compiler is actually just a "C-front": it generates a C file and then calls out to Visual Studio.
