@@ -40,28 +40,97 @@ builder_write :: proc(s: string) -> (err: io.Error) {
 indent_spaces_per_level: int = 4;
 indent_level: int;
 
-compile_program_as_c :: proc(program: []u8, file_name: string) -> (success: bool) {
+// Here we have custom i/o procedures in place of getchar/putchar because we want to compile without
+// relying on the C standard library.
+
+builder_write_platform_declarations :: proc() -> (err: io.Error) {
+	err |= builder_write("\n");
+	err |= builder_write("#if defined(_WIN32)\n");
+	err |= builder_write("#define STD_INPUT_HANDLE ((uint32_t)-10)\n");
+	err |= builder_write("#define STD_OUTPUT_HANDLE ((uint32_t)-11)\n");
+	err |= builder_write("__declspec(dllimport) void *__stdcall GetStdHandle(uint32_t);\n");
+	err |= builder_write("__declspec(dllimport) int __stdcall ReadConsoleA(void *, void *, uint32_t, uint32_t *, void *);\n");
+	err |= builder_write("__declspec(dllimport) int __stdcall WriteConsoleA(void *, const void *, uint32_t, uint32_t *, void *);\n");
+	err |= builder_write("#endif\n");
+	err |= builder_write("\n");
+	return;
+}
+
+builder_write_putbyte_definition :: proc() -> (err: io.Error) {
+	err |= builder_write("\n");
+	err |= builder_write("static bool putbyte(uint8_t byte) {\n");
+	err |= builder_write("#if defined(_WIN32)\n");
+	indent_level += 1;
+	
+	err |= builder_write("void *stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);\n");
+	err |= builder_write("uint32_t bytes_written;\n");
+	err |= builder_write("bool success = WriteConsoleA(stdout_handle, &byte, 1, &bytes_written, 0) && bytes_written == 1;\n");
+	
+	indent_level -= 1;
+	err |= builder_write("#else\n");
+	err |= builder_write("# error Not implemented for this platform.\n");
+	err |= builder_write("#endif\n");
+	indent_level += 1;
+	
+	err |= builder_write("return success;\n");
+	
+	indent_level -= 1;
+	err |= builder_write("}\n");
+	err |= builder_write("\n");
+	return;
+}
+
+builder_write_getbyte_definition :: proc() -> (err: io.Error) {
+	err |= builder_write("\n");
+	err |= builder_write("static uint8_t getbyte(void) {\n");
+	err |= builder_write("#if defined(_WIN32)\n");
+	indent_level += 1;
+	
+	err |= builder_write("void *stdin_handle = GetStdHandle(STD_INPUT_HANDLE);\n");
+	err |= builder_write("uint32_t bytes_read;\n");
+	err |= builder_write("uint8_t byte;\n");
+	err |= builder_write("bool success = ReadConsoleA(stdin_handle, &byte, 1, &bytes_read, 0) && bytes_read == 1;\n");
+	err |= builder_write("if (!success) { byte = 0; }\n");
+	
+	indent_level -= 1;
+	err |= builder_write("#else\n");
+	err |= builder_write("# error Not implemented for this platform.\n");
+	err |= builder_write("#endif\n");
+	indent_level += 1;
+	
+	err |= builder_write("return byte;\n");
+	
+	indent_level -= 1;
+	err |= builder_write("}\n");
+	err |= builder_write("\n");
+	return;
+}
+
+transpile_program_to_c :: proc(program: []u8, file_name: string) -> (success: bool) {
 	success = false;
 	
-	c_file_name, c_cat_error := strings.concatenate({file_name, ".c"}, context.temp_allocator);
-	_ = c_cat_error; // @Todo: Check error.
-	
-	handle, open_errno := os.open(c_file_name, os.O_CREATE|os.O_WRONLY);
+	// We need to first remove the file because O_CREATE does not always create the file, but only if it doesn't
+	// exist already.
+	remove_errno := os.remove(file_name); _ = remove_errno;
+	handle, open_errno := os.open(file_name, os.O_CREATE|os.O_WRONLY);
 	if open_errno == 0 {
 		success = true;
 		
 		stream := os.stream_from_handle(handle);
 		bufio.writer_init_with_buf(&builder_writer, stream, builder_buffer[:]);
 		
+		builder_write("#include <stdbool.h>\n");
 		builder_write("#include <stdint.h>\n");
-		builder_write("#include <stdio.h>\n");
+		builder_write_platform_declarations();
+		builder_write_getbyte_definition();
+		builder_write_putbyte_definition();
 		builder_write("static uint8_t memory[30000];\n");
 		builder_write("int main(void) {\n");
 		indent_level += 1;
 		
 		builder_write("int dp = 0;\n");
 		
-		/*
+		/* How brainfuck commands translate to C:
 >	++ptr;
 <	--ptr;
 +	++(*ptr);
@@ -114,11 +183,11 @@ compile_program_as_c :: proc(program: []u8, file_name: string) -> (success: bool
 				
 				// @Incomplete: Error checking for io errors?
 				case '.': {
-					builder_write("putchar((int)memory[dp]);\n");
+					builder_write("putbyte(memory[dp]);\n");
 				}
 				
 				case ',': {
-					builder_write("memory[dp] = (uint8_t)getchar();\n");
+					builder_write("memory[dp] = getbyte();\n");
 				}
 				
 				case: ;;
@@ -138,29 +207,12 @@ compile_program_as_c :: proc(program: []u8, file_name: string) -> (success: bool
 		}
 		
 		os.close(handle);
-		
-		if success {
-			exe_file_name, exe_cat_error := strings.concatenate({file_name, ".exe"}, context.temp_allocator);
-			// @Todo: Error checking
-			
-			command_line := fmt.aprintf("cl %s /Fe%s /nologo /W4 /WX /O2 /MT /TC /link /incremental:no /opt:ref /WX%c", c_file_name, exe_file_name, rune(0));
-			libc.system(strings.unsafe_string_to_cstring(command_line));
-			
-			obj_file_name, obj_cat_error := strings.concatenate({file_name, ".obj"}, context.temp_allocator);
-			errno := os.remove(obj_file_name);
-			// @Todo: Error checking
-		}
 	} else {
 		fmt.eprintf("The file '%s' could not be opened or read.\n", file_name);
 	}
-	
-	free_err := runtime.free_all(context.temp_allocator);
-	_ = free_err; // @Todo: Error checking
 	
 	return;
 }
 
 builder_buffer: [1024]u8;
 builder_writer: bufio.Writer;
-
-import "core:c/libc";

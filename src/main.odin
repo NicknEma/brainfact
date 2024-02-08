@@ -9,6 +9,7 @@ import "core:strings";
 import "core:path/filepath";
 import slices "core:slice";
 
+import "core:c/libc";
 import "core:runtime";
 import "core:intrinsics";
 
@@ -61,13 +62,32 @@ main :: proc() {
 			if read_success {
 				program := transmute([]u8)program_string;
 				
+				dest_no_extension: string;
 				if dest == "" {
-					dest = file;
+					dest = filepath.stem(file);
+					dest_no_extension = dest;
+					cat_error_exe: runtime.Allocator_Error;
+					dest, cat_error_exe = strings.concatenate({dest, ".exe"});
+					// @Todo: Error checking
+				} else {
+					dest_no_extension = filepath.stem(dest);
 				}
 				
-				dest_no_extension := filepath.stem(dest);
+				dest_c, cat_error_c := strings.concatenate({dest_no_extension, ".c"}, context.temp_allocator);
+				_ = cat_error_c; // @Todo: Check error.
 				
-				compile_program_as_c(program, dest_no_extension);
+				transpile_success := transpile_program_to_c(program, dest_c);
+				
+				if transpile_success {
+					// @Todo: Error checking
+					command_line := fmt.aprintf("cl %s /Fe%s /nologo /W4 /WX /O2 /MT /TC /link /incremental:no /opt:ref /WX%c", dest_c, dest, rune(0));
+					logln(command_line);
+					libc.system(strings.unsafe_string_to_cstring(command_line));
+					
+					dest_obj, cat_error_obj := strings.concatenate({dest_no_extension, ".obj"}, context.temp_allocator);
+					remove_errno := os.remove(dest_obj);
+					// @Todo: Error checking
+				}
 			} else {
 				fmt.eprintf("The file '%s' could not be opened or read.\n", file);
 			}
@@ -115,7 +135,7 @@ Options:
 -help    Displays this text.`;
 
 logln :: proc(args: ..any) {
-	when false {
-		fmt.println(args);
+	when ODIN_DEBUG {
+		fmt.println(..args);
 	} else { _ = args; }
 }
