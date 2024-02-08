@@ -18,7 +18,7 @@ This program prints `Hello, World!`.
 #### Windows
 - Make sure you have [Visual Studio](https://learn.microsoft.com/en-us/visualstudio/install/install-visual-studio?view=vs-2022) installed on your device.
 - Install the [Odin compiler](https://github.com/odin-lang/Odin) and [add its location to the `path`](https://www.computerhope.com/issues/ch000549.htm) environment variable.
-- Either start a [64-bit developer command prompt](https://learn.microsoft.com/en-us/visualstudio/ide/reference/command-prompt-powershell?view=vs-2022), or start a regular command prompt and run `vcvars64.bat`.
+- Either start a [64-bit developer command prompt](https://learn.microsoft.com/en-us/visualstudio/ide/reference/command-prompt-powershell?view=vs-2022) or start a regular command prompt and run `vcvars64.bat`.
 - Run `build.bat`.
 
 ## Use
