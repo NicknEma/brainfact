@@ -5,22 +5,13 @@ import "core:os";
 import "core:fmt";
 import "core:bufio";
 
-import "core:strings";
-import slices "core:slice";
-
-import "core:runtime";
-import "core:intrinsics";
-
-_ :: io;
-_ :: os;
-_ :: fmt;
-_ :: bufio;
-
-_ :: slices;
-_ :: strings;
-
-_ :: runtime;
-_ :: intrinsics;
+// @Cleanup: The only "errors" left to handle in this file are i/o errors (both for the compiler
+// and the generated program).
+// Understand if there's a standard way of handling/preventing/anticipating them,
+// and if not put an explanatory comment.
+// @Note: I don't know if print-like functions do dynamic allocations, but ideally that should have
+// already been handled by the startup code in main(). If we get here, I assume that all memory
+// allocations were successful and that we have enough memory to print those short messages.
 
 builder_write :: proc(s: string) -> (err: io.Error) {
 	// Assumes the builder_writer has already been initialized.
@@ -111,104 +102,110 @@ transpile_program_to_c :: proc(program: []u8, file_name: string) -> (success: bo
 	
 	// We need to first remove the file because O_CREATE does not always create the file, but only if it doesn't
 	// exist already.
-	remove_errno := os.remove(file_name); _ = remove_errno;
-	handle, open_errno := os.open(file_name, os.O_CREATE|os.O_WRONLY);
-	if open_errno == 0 {
-		success = true;
-		
-		stream := os.stream_from_handle(handle);
-		bufio.writer_init_with_buf(&builder_writer, stream, builder_buffer[:]);
-		
-		builder_write("#include <stdbool.h>\n");
-		builder_write("#include <stdint.h>\n");
-		builder_write_platform_declarations();
-		builder_write_getbyte_definition();
-		builder_write_putbyte_definition();
-		builder_write("static uint8_t memory[30000];\n");
-		builder_write("int main(void) {\n");
-		indent_level += 1;
-		
-		builder_write("int dp = 0;\n");
-		
-		/* How brainfuck commands translate to C:
->	++ptr;
-<	--ptr;
-+	++(*ptr);
--	--(*ptr);
-.	putchar(*ptr);
-,	*ptr = getchar();
-[	while (*ptr) {
-]	}
-*/
-		
-		depth := 0;
-		program_loop: for instr, ip in program {
-			switch instr {
-				case '>': {
-					builder_write("dp += 1;\n");
-					builder_write("if (dp > sizeof(memory) - 1) { dp = 0; }\n");
-				}
-				
-				case '<': {
-					builder_write("dp -= 1;\n");
-					builder_write("if (dp < 0) { dp = sizeof(memory) - 1; }\n");
-				}
-				
-				case '+': {
-					builder_write("memory[dp] += 1;\n");
-				}
-				
-				case '-': {
-					builder_write("memory[dp] -= 1;\n");
-				}
-				
-				case '[': {
-					builder_write("while (memory[dp]) {\n");
-					indent_level += 1;
-					
-					depth += 1;
-				}
-				
-				case ']': {
-					indent_level -= 1;
-					builder_write("}\n");
-					
-					depth -= 1;
-					if depth < 0 {
-						fmt.eprintf("[%i] Syntax error: ']' has no corresponding '['\n", ip);
-						success = false;
-						break program_loop;
+	remove_errno: os.Errno = 0;
+	if os.exists(file_name) {
+		remove_errno = os.remove(file_name);
+	}
+	if remove_errno == 0 {
+		handle, open_errno := os.open(file_name, os.O_CREATE|os.O_WRONLY);
+		if open_errno == 0 {
+			success = true;
+			
+			stream := os.stream_from_handle(handle);
+			bufio.writer_init_with_buf(&builder_writer, stream, builder_buffer[:]);
+			
+			builder_write("#include <stdbool.h>\n");
+			builder_write("#include <stdint.h>\n");
+			builder_write_platform_declarations();
+			builder_write_getbyte_definition();
+			builder_write_putbyte_definition();
+			builder_write("static uint8_t memory[30000];\n");
+			builder_write("int main(void) {\n");
+			indent_level += 1;
+			
+			builder_write("int dp = 0;\n");
+			
+			/* How brainfuck commands translate to C:
+	>	++ptr;
+	<	--ptr;
+	+	++(*ptr);
+	-	--(*ptr);
+	.	putchar(*ptr);
+	,	*ptr = getchar();
+	[	while (*ptr) {
+	]	}
+	*/
+			
+			depth := 0;
+			program_loop: for instr, ip in program {
+				switch instr {
+					case '>': {
+						builder_write("dp += 1;\n");
+						builder_write("if (dp > sizeof(memory) - 1) { dp = 0; }\n");
 					}
+					
+					case '<': {
+						builder_write("dp -= 1;\n");
+						builder_write("if (dp < 0) { dp = sizeof(memory) - 1; }\n");
+					}
+					
+					case '+': {
+						builder_write("memory[dp] += 1;\n");
+					}
+					
+					case '-': {
+						builder_write("memory[dp] -= 1;\n");
+					}
+					
+					case '[': {
+						builder_write("while (memory[dp]) {\n");
+						indent_level += 1;
+						
+						depth += 1;
+					}
+					
+					case ']': {
+						indent_level -= 1;
+						builder_write("}\n");
+						
+						depth -= 1;
+						if depth < 0 {
+							_ = fmt.eprintf("[%i] Syntax error: ']' has no corresponding '['\n", ip);
+							success = false;
+							break program_loop;
+						}
+					}
+					
+					case '.': {
+						builder_write("putbyte(memory[dp]);\n");
+					}
+					
+					case ',': {
+						builder_write("memory[dp] = getbyte();\n");
+					}
+					
+					case: ;;
 				}
-				
-				// @Incomplete: Error checking for io errors?
-				case '.': {
-					builder_write("putbyte(memory[dp]);\n");
-				}
-				
-				case ',': {
-					builder_write("memory[dp] = getbyte();\n");
-				}
-				
-				case: ;;
 			}
-		}
-		
-		if depth == 0 {
-			builder_write("return 0;\n");
 			
-			indent_level -= 1;
-			builder_write("}\n");
+			if depth == 0 {
+				builder_write("return 0;\n");
+				
+				indent_level -= 1;
+				builder_write("}\n");
+				
+				_ = bufio.writer_flush(&builder_writer);
+			} else {
+				_ = fmt.eprintf("Unbalanced stack.\n"); // @Improvement: Better error message.
+				success = false;
+			}
 			
-			bufio.writer_flush(&builder_writer);
+			os.close(handle);
 		} else {
-			fmt.eprintf("Unbalanced stack.\n"); // @Todo: Better error message.
-			success = false;
+			_ = fmt.eprintf("The file '%s' could not be opened or read.\n", file_name);
 		}
-		
-		os.close(handle);
 	} else {
-		fmt.eprintf("The file '%s' could not be opened or read.\n", file_name);
+		_ = fmt.eprintf("The file '%s' already exists and could not be overwritten.\n", file_name);
 	}
 	
 	return;

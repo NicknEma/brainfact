@@ -66,6 +66,7 @@ main :: proc() {
 				if dest == "" {
 					dest = filepath.stem(file);
 					dest_no_extension = dest;
+					
 					cat_error_exe: runtime.Allocator_Error;
 					dest, cat_error_exe = strings.concatenate({dest, ".exe"});
 					// @Todo: Error checking
@@ -89,12 +90,12 @@ main :: proc() {
 					// @Todo: Error checking
 				}
 			} else {
-				fmt.eprintf("The file '%s' could not be opened or read.\n", file);
+				_ = fmt.eprintf("The file '%s' could not be opened or read.\n", file);
 			}
 		}
 		
 		case .Print_Help: {
-			fmt.println(HELP_TEXT);
+			_ = fmt.println(HELP_TEXT);
 		}
 	}
 	
@@ -113,10 +114,10 @@ main :: proc() {
 				
 				if      arg    == "-help"   { mode = .Print_Help; break; }
 				else if arg    == "-build" do mode = .Build;
-				else if arg[0] == '-'      do fmt.eprintf("The option '%s' was not recognized and will be ignored.\n", arg);
+				else if arg[0] == '-'      do _ = fmt.eprintf("The option '%s' was not recognized and will be ignored.\n", arg);
 				else if file   == ""       do file = arg;
 				else if dest   == ""       do dest = arg;
-				else                       do fmt.eprintf("The file '%s' will be ignored because both the source ('%s') and the destination ('%s') were already supplied.\n", arg, file, dest);
+				else                       do _ = fmt.eprintf("The file '%s' will be ignored because both the source ('%s') and the destination ('%s') were already supplied.\n", arg, file, dest);
 			}
 		} else {
 			mode = .Print_Help;
@@ -136,6 +137,6 @@ Options:
 
 logln :: proc(args: ..any) {
 	when ODIN_DEBUG {
-		fmt.println(..args);
+		_ = fmt.println(..args);
 	} else { _ = args; }
 }
