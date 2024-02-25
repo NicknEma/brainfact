@@ -1,4 +1,4 @@
-![Brainfact icon.](/assets/Brainfact.ico "The Brainfact icon.")
+![Brainfact icon.](/assets/Brainfact.png "The Brainfact icon.")
 
 # Brainfact
 A brainfuck interpreter and brainfuck-to-C transpiler written in odin.
