@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="assets/Brainfact.png" alt="Brainfact logo." style="width:65%">
+    <img src="assets/Brainfact.png" alt="Brainfact logo." style="width:25%">
 </p>
 
 # Brainfact
