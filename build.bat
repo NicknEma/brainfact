@@ -1,5 +1,8 @@
 @echo off
 
+rc /nologo res/resources.rc
+
 if not exist debug mkdir debug
 del debug/bf.pdb > NUL 2> NUL
-odin build src -debug -o:none -out:debug/bf.exe -vet -warnings-as-errors
+odin build src -debug -o:none -out:debug/bf.exe -vet -warnings-as-errors -extra-linker-flags:res/resources.res
+del res/resources.res > NUL 2> NUL
