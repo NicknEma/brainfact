@@ -1,28 +1,15 @@
 package brainfact;
 
-import "core:io";
+import "base:runtime";
+import "base:intrinsics";
+
 import "core:os";
 import "core:fmt";
 import "core:bufio";
-
 import "core:strings";
 import "core:path/filepath";
-import slices "core:slice";
 
 import "core:c/libc";
-import "core:runtime";
-import "core:intrinsics";
-
-_ :: io;
-_ :: os;
-_ :: fmt;
-_ :: bufio;
-
-_ :: slices;
-_ :: strings;
-
-_ :: runtime;
-_ :: intrinsics;
 
 program_memory: [30000]u8;
 
