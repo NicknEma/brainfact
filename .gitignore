@@ -1,4 +1,5 @@
 
 odin_help.txt
-hello-world.c
-hello-world.exe
+*.c
+*.exe
+*.pdb
