@@ -1,5 +1,7 @@
 
 odin_help.txt
+todo.txt
 *.c
 *.exe
 *.pdb
+*.map
