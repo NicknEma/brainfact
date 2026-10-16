@@ -1,16 +1,16 @@
 [This example was directly copied from Wikipedia]
 
-[ This program prints 'Hello World!' and a newline to the screen, its
+[ This program prints "Hello World!" and a newline to the screen; its
   length is 106 active command characters. [It is not the shortest.]
 
-  This loop is an 'initial comment loop', a simple way of adding a comment
+  This loop is an "initial comment loop", a simple way of adding a comment
   to a BF program such that you don't have to worry about any command
-  characters. Any '.', ',', '+', '-', '<' and '>' characters are simply
-  ignored, the '[' and ']' characters just have to be balanced. This
+  characters. Any ".", ",", "+", "-", "<" and ">" characters are simply
+  ignored, the "[" and "]" characters just have to be balanced. This
   loop and the commands it contains are ignored because the current cell
   defaults to a value of 0; the 0 value causes this loop to be skipped.
 ]
-++++++++               Set Cell #0 to 8
+++++++++                Set Cell #0 to 8
 [
     >++++               Add 4 to Cell #1; this will always set Cell #1 to 4
     [                   as the cell will be cleared by the loop
