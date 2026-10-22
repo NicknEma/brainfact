@@ -1,4 +1,4 @@
-[This program was directly copied from Wikipedia]
+[ This program was directly copied from Wikipedia, except for the last 2 lines ]
 
 ++       Cell c0 = 2
 > +++++  Cell c1 = 5
@@ -20,3 +20,6 @@ We use a loop to compute 48 = 6 * 8
 > -        Subtract 1 from c1
 ]
 < .        Print out c0 which has the value 55 which translates to "7"!"
+
+> +++++    Cell c0 = 5
++++++ .    Cell c0 = 10 (line feed) and print

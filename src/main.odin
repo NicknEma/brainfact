@@ -1,15 +1,10 @@
 package brainfact
 
-import "base:runtime"
-import "base:intrinsics"
-
 import "core:os"
 import "core:fmt"
 import "core:bufio"
 import "core:strings"
 import "core:path/filepath"
-
-import "core:c/libc"
 
 main :: proc() {
 	mode, file, dest := parse_arguments();
@@ -34,44 +29,144 @@ main :: proc() {
 	}
 	
 	case .Build: {
-		if program, read_error := os.read_entire_file(file, context.temp_allocator); read_error == nil {
-			dest_no_extension: string;
-			if dest == "" {
-				dest = filepath.stem(file);
-				dest_no_extension = dest;
-				
-				cat_error_exe: runtime.Allocator_Error;
-				dest, cat_error_exe = strings.concatenate({dest, ".exe"});
-				// @Todo: Error checking
+		// Select backend and target.
+		supported_backends: bit_set[Backend];
+		supported_targets:  bit_set[Target];
+		
+		when ODIN_OS == .Windows {
+			DEFAULT_BACKEND :: Backend.Visual_Studio;
+			DEFAULT_TARGET  :: Target.Windows;
+			
+			supported_backends += { .Visual_Studio, .Clang };
+			supported_targets  += { .Windows };
+		} else when ODIN_OS == .Linux {
+			DEFAULT_BACKEND :: Backend.Clang;
+			DEFAULT_TARGET  :: Target.Linux;
+			
+			supported_backends += { .Clang };
+			supported_targets  += { .Linux };
+		} else {
+			DEFAULT_BACKEND :: Backend.None;
+			DEFAULT_TARGET  :: Target.None;
+		}
+		
+		assert(DEFAULT_BACKEND == .None || DEFAULT_BACKEND in supported_backends);
+		assert(DEFAULT_TARGET  == .None || DEFAULT_TARGET  in supported_targets);
+		
+		backend := DEFAULT_BACKEND;
+		target  := DEFAULT_TARGET;
+		
+		// If in the future we want the ability to override the chosen backend and/or target
+		// with a command line flag, we could do it here.
+		// If the backend changes, the list of supported targets changes too.
+		
+		if backend not_in supported_backends {
+			// @Todo: Error: backend is not supported by this version of the compiler. Supported backends are ..
+			break;
+		}
+		
+		if target not_in supported_targets {
+			// @Todo: Error: target is not supported by this version of the compiler and this backend. Supported targets for the selected backend are ..
+			break;
+		}
+		
+		program, read_error := os.read_entire_file(file, context.temp_allocator);
+		if read_error != nil {
+			fmt.eprintfln("Could not open or read file '%s': %v.", file, read_error);
+			break;
+		}
+		
+		// @Temp: renaming
+		source_file := file;
+		
+		// Try to match Visual Studio's behaviour, which seems to be:
+		// - If an output path is supplied:
+		//   - Trim any trailing '.' from it
+		//   - If it doesn't contain any '.', append '.exe' to it
+		// - Else
+		//   - Trim the short extension from the source
+		//   - Append '.exe' to it (it doesn't matter if it already ends in '.exe')
+		//
+		// In our case, we treat the source path as always containing brainfuck code.
+		// We trim the short extension if it has one, it doesn't matter
+		// which one it is.
+		
+		source_file_stem := filepath.stem(source_file);
+		
+		// Define useful file paths.
+		// @Todo: error check
+		// @Todo: factor these branches
+		temp_c_file, temp_o_file, target_file: string;
+		temp_o_file, _ = strings.concatenate({source_file_stem, ".obj"}, context.temp_allocator); // @Todo: choose this based on the backend (.obj, .o), or pass it to the backend
+		if dest != "" {
+			target_file = strings.trim_right(dest, ".");
+			if !strings.contains(target_file, ".") {
+				temp_c_file, _ = strings.concatenate({dest, ".c"}, context.temp_allocator);
+				target_file, _ = strings.concatenate({dest, ".exe"}, context.temp_allocator); // @Todo: same as below
 			} else {
-				dest_no_extension = filepath.stem(dest);
-			}
-			
-			dest_c, cat_error_c := strings.concatenate({dest_no_extension, ".c"}, context.temp_allocator);
-			_ = cat_error_c; // @Todo: Check error.
-			
-			transpile_success := transpile_program_to_c(program, dest_c);
-			
-			if transpile_success {
-				// @Todo: Error checking
-				command_line := fmt.aprintf("cl %s /Fe%s /nologo /W4 /WX /O2 /MT /TC /link /incremental:no /opt:ref /WX%c", dest_c, dest, rune(0));
-				when ODIN_DEBUG {
-					_ = fmt.println(command_line);
-				}
-				libc.system(strings.unsafe_string_to_cstring(command_line));
-				
-				dest_obj, cat_error_obj := strings.concatenate({dest_no_extension, ".obj"}, context.temp_allocator);
-				remove_errno := os.remove(dest_obj);
-				_, _ = remove_errno, cat_error_obj;
-				// @Todo: Error checking
+				temp_c_file, _ = strings.concatenate({target_file, ".c"}, context.temp_allocator);
 			}
 		} else {
-			_ = fmt.eprintfln("Could not open or read file '%s': %v.", file, read_error);
+			temp_c_file, _ = strings.concatenate({source_file_stem, ".c"}, context.temp_allocator);
+			target_file, _ = strings.concatenate({source_file_stem, ".exe"}, context.temp_allocator); // @Todo: this or nothing depending on the target?
+		}
+		
+		// Transpile to C.
+		transpile_success: bool;
+		handle, open_error := os.open(temp_c_file, {.Write, .Create, .Trunc});
+		if open_error == nil {
+			target_buffer: [1024]u8;
+			target_writer: bufio.Writer;
+			
+			bufio.writer_init_with_buf(&target_writer, os.to_stream(handle), target_buffer[:]);
+			
+			transpile_success = transpile_program_to_c(program, target_writer, backend, target);
+			os.close(handle);
+		} else {
+			fmt.eprintfln("Could not open or read file '%s': %v.", temp_c_file, read_error);
+		}
+		
+		// Invoke the backend.
+		if transpile_success {
+			process_desc: os.Process_Desc;
+			
+			switch backend {
+			case .Visual_Studio: {
+				target_flag := strings.concatenate({ "/Fe", target_file }, context.temp_allocator) or_else "";
+				process_desc.command = { "cl", temp_c_file, target_flag, "/nologo", "/W4", "/WX", "/O1", "/MT", "/TC", "/link", "/incremental:no", "/opt:ref", "/entry:mainCRTStartup", "/subsystem:console", "kernel32.lib"};
+			}
+			case .Clang: {
+				process_desc.command = { "clang", temp_c_file, "-o", target_file, "-Wall", "-Wextra", "-pedantic", "-O1"};
+			}
+			case .None: panic("Invalid backend");
+			}
+			
+			process_state, stdout_capture, stderr_capture, exec_error := os.process_exec(process_desc, context.temp_allocator);
+			if exec_error == nil {
+				assert(process_state.exited);
+				if process_state.exit_code != 0 {
+					if stdout_capture != nil {
+						fmt.eprintln(transmute(string)stdout_capture);
+					}
+					if stderr_capture != nil {
+						fmt.eprintln(transmute(string)stderr_capture);
+					}
+					fmt.eprintfln("Internal error: backend did not succeed, C generation was wrong.");
+				}
+			} else {
+				fmt.eprintfln("Could not invoke backend: %v", exec_error);
+			}
+			
+			_ = os.remove(temp_o_file); // @Todo: Should we print a message on failure? If it doesn't exist, maybe try to find other matches?
+		}
+		
+		if open_error == nil {
+			// @Todo: Remove C by default, -keep-c flag
 		}
 	}
 	
 	case .Print_Help: {
-		_ = fmt.println(HELP_TEXT);
+		fmt.println(HELP_TEXT);
 	}
 	}
 	
@@ -91,10 +186,10 @@ main :: proc() {
 				
 				if      arg    == "-help"   { mode = .Print_Help; break; }
 				else if arg    == "-build" do mode = .Build;
-				else if arg[0] == '-'      do _ = fmt.eprintfln("The option '%s' was not recognized and will be ignored.", arg);
+				else if arg[0] == '-'      do fmt.eprintfln("The option '%s' was not recognized and will be ignored.", arg);
 				else if file   == ""       do file = arg;
 				else if dest   == ""       do dest = arg;
-				else                       do _ = fmt.eprintfln("The file '%s' will be ignored because both the source ('%s') and the destination ('%s') were already supplied.", arg, file, dest);
+				else                       do fmt.eprintfln("The file '%s' will be ignored because both the source ('%s') and the destination ('%s') were already supplied.", arg, file, dest);
 			}
 		} else {
 			mode = .Print_Help;
@@ -105,6 +200,9 @@ main :: proc() {
 	
 	Mode :: enum { Run, Build, Print_Help };
 }
+
+Backend :: enum { None, Visual_Studio, Clang };
+Target  :: enum { None, Windows, Linux };
 
 HELP_TEXT :: `Usage: bf <file> [-build <dest>] [-help]
 

@@ -177,7 +177,7 @@ run_program :: proc(program: []u8, memory: []u8, reader: bufio.Reader, writer: b
 			// Accept one byte of input, storing its value in the byte at the data pointer.
 			bufio.writer_flush(&writer);
 			val, err := bufio.reader_read_byte(&reader);
-			if err != nil {
+			if err != nil && err != .EOF {
 				fmt.eprintfln("Could not read byte: %v.", err);
 			} else {
 				memory[dp] = val;
