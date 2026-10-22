@@ -16,7 +16,7 @@ A program written in it looks like this:
 This program prints `Hello, World!`.
 
 ## Why did I do this?
-- To practice programming in odin.
+- To practice programming in Odin.
 - To build an interpreter/compiler without getting distracted by all the parsing theory and predefined structures that are easy to self–impose when thinking about a “regular” programming language.
 
 ## Build
