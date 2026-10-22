@@ -25,7 +25,7 @@ This program prints `Hello, World!`.
 - Either start a [64–bit developer command prompt](https://learn.microsoft.com/en-us/visualstudio/ide/reference/command-prompt-powershell?view=vs-2022) or start a regular command prompt and run `vcvars64.bat`.
 - Run `build.bat` or `build_release.bat`.
 ### Linux
-- Install the [Odin compiler](https://github.com/odin-lang/Odin)
+- Install the [Odin compiler](https://github.com/odin-lang/Odin).
 - Run `build.sh` or `build_release.sh`.
 
 ## Use
