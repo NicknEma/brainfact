@@ -24,7 +24,7 @@ main :: proc() {
 			
 			run_program(program, target_memory[:], target_reader, target_writer);
 		} else {
-			fmt.eprintfln("Could not open or read file '%s': %v.", file, error);
+			fmt.eprintfln("Could not open or read file '%s': %v.", file, os_error_string(error));
 		}
 	}
 	
@@ -72,7 +72,7 @@ main :: proc() {
 		
 		program, read_error := os.read_entire_file(file, context.temp_allocator);
 		if read_error != nil {
-			fmt.eprintfln("Could not open or read file '%s': %v.", file, read_error);
+			fmt.eprintfln("Could not open or read file '%s': %v.", file, os_error_string(read_error));
 			break;
 		}
 		
@@ -123,7 +123,7 @@ main :: proc() {
 			transpile_success = transpile_program_to_c(program, target_writer, backend, target);
 			os.close(handle);
 		} else {
-			fmt.eprintfln("Could not open or read file '%s': %v.", temp_c_file, read_error);
+			fmt.eprintfln("Could not open or create file '%s': %v.", temp_c_file, os_error_string(open_error));
 		}
 		
 		// Invoke the backend.
@@ -154,7 +154,7 @@ main :: proc() {
 					fmt.eprintfln("Internal error: backend did not succeed, C generation was wrong.");
 				}
 			} else {
-				fmt.eprintfln("Could not invoke backend: %v", exec_error);
+				fmt.eprintfln("Could not invoke backend: %v", os_error_string(exec_error));
 			}
 			
 			_ = os.remove(temp_o_file); // @Todo: Should we print a message on failure? If it doesn't exist, maybe try to find other matches?
@@ -199,6 +199,16 @@ main :: proc() {
 	}
 	
 	Mode :: enum { Run, Build, Print_Help };
+}
+
+os_error_string :: proc(err: os.Error) -> string {
+	str: string = ---
+	if _, ok := os.is_platform_error(err); ok {
+		str = "unknown error"
+	} else {
+		str = os.error_string(err)
+	}
+	return str
 }
 
 Backend :: enum { None, Visual_Studio, Clang };
