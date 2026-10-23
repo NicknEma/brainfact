@@ -124,6 +124,8 @@ builder_write_platform_declarations :: proc(write_context: ^Write_Context, backe
 		err |= builder_write(write_context, "__declspec(dllimport) int   __stdcall WriteConsoleA(void *, const void *, uint32_t, uint32_t *, void *);\n");
 	}
 	case .Linux: {
+		err |= builder_write(write_context, "#include <sys/types.h>\n");
+		err |= builder_write(write_context, "\n");
 		err |= builder_write(write_context, "#define  STDIN_FILENO 0\n");
 		err |= builder_write(write_context, "#define STDOUT_FILENO 1\n");
 		err |= builder_write(write_context, "ssize_t  read(int,       void *, size_t);\n");
