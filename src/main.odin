@@ -166,6 +166,11 @@ main :: proc() {
 	}
 	
 	case .Print_Help: {
+		bf := "bf";
+		if len(os.args) > 0 {
+			bf = os.args[0]
+		}
+		fmt.println(bf, "is an interpreter and compiler for the Brainfuck programming language.");
 		fmt.println(HELP_TEXT);
 	}
 	}
@@ -204,6 +209,10 @@ main :: proc() {
 os_error_string :: proc(err: os.Error) -> string {
 	str: string = ---
 	if _, ok := os.is_platform_error(err); ok {
+		// os.error_string() uses type info to get a string value for system errors,
+		// which means it's going to return e.g. 'INVALID_FUNCTION' on Windows
+		// if the user tries to open a folder. That's really ugly, and for a
+		// user is no better than 'unknown error'.
 		str = "unknown error"
 	} else {
 		str = os.error_string(err)
@@ -214,13 +223,14 @@ os_error_string :: proc(err: os.Error) -> string {
 Backend :: enum { None, Visual_Studio, Clang };
 Target  :: enum { None, Windows, Linux };
 
-HELP_TEXT :: `Usage: bf <file> [-build <dest>] [-help]
+HELP_TEXT :: `Usage:
+	bf <file> [-build <dest>] [-help]
 
 Options:
-	-build	Compiles the input file down to an executable instead of interpreting it.
-	-help	Displays this text.
+	-build	Compiles the input file down to an executable instead of interpreting it. It uses a C compiler that is already on the system if it can find one.
+	-help 	Displays this text.
 
 Examples:
 	bf  in.bf                	Runs 'in.bf'.
-	bf  in.bf -build out.exe 	Builds 'in.bf' as 'out.bf'.
+	bf  in.bf -build out.exe 	Builds 'in.bf' as 'out.exe'.
 	bf  -help                	Displays this text.`;
